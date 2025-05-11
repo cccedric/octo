@@ -129,7 +129,8 @@ class OctoModel:
         else:
             del tasks["language_instruction"]
 
-        _verify_shapes(tasks, "tasks", self.example_batch["task"], starting_dim=1)
+        _verify_shapes(
+            tasks, "tasks", self.example_batch["task"], starting_dim=1)
         return tasks
 
     @partial(jax.jit, static_argnames=("train",))
@@ -156,7 +157,8 @@ class OctoModel:
             self.example_batch["observation"],
             starting_dim=2,
         )
-        _verify_shapes(tasks, "tasks", self.example_batch["task"], starting_dim=1)
+        _verify_shapes(
+            tasks, "tasks", self.example_batch["task"], starting_dim=1)
 
         return self.module.apply(
             {"params": self.params},
@@ -222,7 +224,8 @@ class OctoModel:
             if normalization_type == NormalizationType.NORMAL:
                 mask = unnormalization_statistics.get(
                     "mask",
-                    jnp.ones_like(unnormalization_statistics["mean"], dtype=bool),
+                    jnp.ones_like(
+                        unnormalization_statistics["mean"], dtype=bool),
                 )
                 action = action[..., : len(mask)]
                 action = jnp.where(
@@ -233,7 +236,8 @@ class OctoModel:
                 )
             elif normalization_type == NormalizationType.BOUNDS:
                 mask = unnormalization_statistics.get(
-                    "mask", jnp.ones_like(unnormalization_statistics["p01"], dtype=bool)
+                    "mask", jnp.ones_like(
+                        unnormalization_statistics["p01"], dtype=bool)
                 )
                 action = action[..., : len(mask)]
                 action = jnp.where(
@@ -248,8 +252,49 @@ class OctoModel:
                     action,
                 )
             else:
-                raise ValueError(f"Unknown normalization type: {normalization_type}")
+                raise ValueError(
+                    f"Unknown normalization type: {normalization_type}")
         return action
+
+    @partial(
+        jax.jit,
+        static_argnames=("train", "sample_shape", "argmax"),
+    )
+    def sample_transformer(
+        self,
+        observations: Data,
+        tasks: Data,
+        timestep_pad_mask: Optional[ArrayLike] = None,
+        train: bool = False,
+    ):
+        """Samples embeddings from the model, which cound be used for action prediction.
+
+        Args:
+            observations: dictionary of arrays of shape (batch_size, window_size, *)
+            tasks: dict of tasks of shape (batch_size, *)
+            timestep_pad_mask: (batch_size, window_size) Boolean mask that is False when the timestep corresponds to padding
+            train: whether to run in train mode
+            ...see `action_heads.py` for the rest of the kwargs.
+        Returns:
+            transformer_outputs: (*sample_shape, batch_size, embedding_size)
+        """
+        if timestep_pad_mask is None:
+            timestep_pad_mask = observations["timestep_pad_mask"]
+
+        transformer_outputs = self.run_transformer(
+            observations, tasks, timestep_pad_mask, train=train
+        )
+
+        token_group = transformer_outputs["readout_action"]
+        assert token_group.tokens.ndim == 4, (
+            f"Expected token_group.tokens to have shape (batch_size, window_size, num_tokens, embedding_size), "
+            f"but got shape {token_group.tokens.shape}"
+        )
+
+        embeddings = token_group.tokens.mean(axis=-2)
+        # Now, embeddings is (batch_size, window_size, embedding_size)
+
+        return embeddings
 
     @classmethod
     def load_pretrained(
@@ -301,7 +346,8 @@ class OctoModel:
         )
         logging.debug(
             "Model was trained with tasks: %s",
-            flax.core.pretty_repr(jax.tree_map(jnp.shape, example_batch["task"])),
+            flax.core.pretty_repr(jax.tree_map(
+                jnp.shape, example_batch["task"])),
         )
 
         # load dataset statistics
@@ -310,7 +356,8 @@ class OctoModel:
         ) as f:
             dataset_statistics = json.load(f)
             dataset_statistics = jax.tree_map(
-                np.array, dataset_statistics, is_leaf=lambda x: not isinstance(x, dict)
+                np.array, dataset_statistics, is_leaf=lambda x: not isinstance(
+                    x, dict)
             )
 
         # create model def (an OctoModule)
@@ -399,7 +446,8 @@ class OctoModel:
             )
             if not tf.io.gfile.exists(example_batch_path):
                 with tf.io.gfile.GFile(example_batch_path, "wb") as f:
-                    f.write(flax.serialization.msgpack_serialize(self.example_batch))
+                    f.write(flax.serialization.msgpack_serialize(
+                        self.example_batch))
 
             # save dataset statistics
             dataset_statistics_path = tf.io.gfile.join(
@@ -408,7 +456,8 @@ class OctoModel:
             if not tf.io.gfile.exists(dataset_statistics_path):
                 with tf.io.gfile.GFile(dataset_statistics_path, "w") as f:
                     json.dump(
-                        jax.tree_map(lambda x: x.tolist(), self.dataset_statistics),
+                        jax.tree_map(lambda x: x.tolist(),
+                                     self.dataset_statistics),
                         f,
                     )
 
@@ -446,7 +495,8 @@ class OctoModel:
 
         if verbose:
             print(
-                module.tabulate(rng, *init_args, train=False, verbose=True, depth=2)
+                module.tabulate(rng, *init_args, train=False,
+                                verbose=True, depth=2)
             )  # Prints out the parameter count of our model, and tokenizer details
 
         @jax.jit
